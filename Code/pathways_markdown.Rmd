@@ -1,0 +1,466 @@
+---
+title: "Process Mining Hip Replacement Pathways"
+author: "Jenny Cooper"
+date: "26/04/2021"
+output: html_document
+
+---
+<style type="text/css">
+.main-container {
+  max-width: 1800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+```{r setup, include=FALSE}
+
+
+library(bupaR)
+library(eventdataR)
+library(xesreadR)
+library(edeaR)
+library(processmapR)
+library(processmonitR)
+library(processcheckR)
+library(knitr)
+library(kableExtra)
+library(heuristicsmineR)
+library(pm4py)
+library(DiagrammeR)
+
+
+#Other packages
+library(tableone)
+library(dplyr)
+library(svgPanZoom)
+library(DiagrammeRsvg)
+library(processanimateR)
+library(plyr)
+library(ggplot2)
+library(htmlwidgets)
+
+
+#------------------------------------------------------------------------
+hip_pathway <- readRDS( "hip_pathway_enriched.rds")
+#------------------------------------------------------------------------
+#Iterative cleaning steps for community data with similar service names
+#------------------------------------------------------------------------
+
+hip_pathway %>% 
+   mutate(activity = replace(activity, 
+                            activity=="community_district nursing service; long term conditions case management service; musculoskeletal service", "community_musculoskeletal service")) %>% 
+  mutate(activity = replace(activity, 
+                            activity=="community_district nursing service; podiatry service", "community_podiatry service")) -> hip_pathway
+#------------------------------------------------------------------------
+#Setting as eventlog format
+#------------------------------------------------------------------------
+hip_pathway %>% #a data.frame with the information in the table above
+  eventlog(
+    case_id = "Pseudo_NHS_Number",
+    activity_id = "activity",
+    activity_instance_id = "activity_instance",
+    lifecycle_id = "status",
+    timestamp = "timestamp",
+    resource_id = "resource"
+  ) -> hip_log
+#------------------------------------------------------------------------
+#Selected activities for the eventlog
+#------------------------------------------------------------------------
+selected_activity<- c("APPT_made",
+                       "community_musculoskeletal service",
+                       "community_physiotherapy service",
+                       "elec_hip_replace",
+                       "GP_refers_for_hip",
+                       "OP_anaesthetic service",
+                       "OP_diagnostic imaging service",
+                       "OP_pain management service",
+                       "OP_physiotherapy service",
+                       "OP_trauma and orthopaedic service",
+                       "primary_care_analgesic",
+                       "primarycare_msk",
+                       "OP_rheumatology service",
+                       "AE")
+
+restricted_activity<- c("APPT_made",
+                      "community_musculoskeletal service",
+                      "elec_hip_replace",
+                      "GP_refers_for_hip",
+                      "OP_diagnostic imaging service",
+                      "OP_physiotherapy service",
+                      "OP_trauma and orthopaedic service",
+                      "primary_care_analgesic",
+                      "primarycare_msk")
+
+#Reduced from heuristics 0.5 model
+selected_activity2<- c("APPT_made",
+                       "community_musculoskeletal service",
+                       "elec_hip_replace",
+                       "GP_refers_for_hip",
+                       "OP_anaesthetic service",
+                       "OP_diagnostic imaging service",
+                       "OP_pain management service",
+                       "OP_physiotherapy service",
+                       "OP_trauma and orthopaedic service",
+                       "primary_care_analgesic",
+                       "primarycare_msk",
+                       "OP_rheumatology service",
+                       "AE")
+
+#------------------------------------------------------------------------
+#Data cleaning for the cost variable
+#------------------------------------------------------------------------
+hip_log$cost2<- hip_log$cost
+hip_log$cost2[is.na(hip_log$cost2)]<-0
+#------------------------------------------------------------------------
+#Mining algorithm
+#------------------------------------------------------------------------
+#Filtering event log for the selected activities
+hip_log %>% filter_activity(selected_activity) -> selected_activity_log
+#Ensuring additional levels are not in the model after reducing the activities (can become a problem for inductive miner)
+selected_activity_log$activity<- factor(selected_activity_log$activity) 
+selected_activity_log$status<- factor(selected_activity_log$status) 
+#------------------------------------------------------------------------
+#Filtering event log for the selected activities
+#Reduced activities identified from the heuristics model (with 0.5 threshold)
+hip_log %>% filter_activity(selected_activity2) -> selected_activity_log2 
+#Ensuring additional levels are not in the model after reducing the activities (can become a problem for inductive miner)
+selected_activity_log2$activity<- factor(selected_activity_log2$activity) 
+selected_activity_log2$status<- factor(selected_activity_log2$status) 
+#------------------------------------------------------------------------
+#Inductive Miner log cleaning
+#------------------------------------------------------------------------
+selected_activity_log %>% 
+  filter(status=="complete") -> patients_completes
+
+
+patients_completes$activity<- factor(patients_completes$activity) 
+patients_completes$status<- factor(patients_completes$status) 
+
+#------------------------------------------------------------------------
+```
+
+### 1 Process Mining for Patients on a Hip Replacement Pathway
+##### 1.1 Activity Frequency
+
+The table below summarises the frequency and relative frequency of the activities involved in the hip replacement pathway identified from the event log.
+
+
+
+
+
+```{r summary, echo = FALSE, fig.width=10, fig.height=5}
+hip_log %>% filter_activity(selected_activity) %>% activity_frequency(level = "activity") %>% kable() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+hip_log %>% filter_activity(selected_activity) %>% activity_frequency(level = "activity") %>% plot()
+
+
+```
+
+
+
+
+
+##### 1.2 Process Maps
+
+
+The identified activities in the event log can be plotted in a process map which can be annotated with different information. For instance the process map below shows the frequencies of activities and flows. This shows a restricted set of activities for illustration purposes.
+
+
+
+
+
+```{r frequency, out.width="100%", out.height="100%", echo = FALSE}
+hip_log %>% 
+  filter_activity(restricted_activity) %>% 
+  process_map() %>%   
+  DiagrammeRsvg::export_svg() %>% 
+  svgPanZoom::svgPanZoom()
+```
+
+
+
+
+
+The next process map shows the event log from a performance perspective i.e. summarising the processing time of activities taking the median in this instance). This shows a restricted set of activities for illustration purposes.
+
+
+
+
+
+
+```{r Performance, out.width="100%", out.height="100%", echo = FALSE}
+hip_log %>% 
+  filter_activity(restricted_activity) %>% 
+  process_map(type=performance(median, units = "days")) %>% 
+  DiagrammeRsvg::export_svg() %>% 
+  svgPanZoom::svgPanZoom()
+
+```
+
+
+
+
+
+User defined measures can also be included. The process map below shows the average cost (median) of the different activities as well as the frequencies between them. This shows a restricted set of activities for illustration purposes.
+
+
+
+
+
+```{r cost, out.width="100%", out.height="100%", echo = FALSE}
+hip_log %>% 
+  filter_activity(restricted_activity) %>% 
+  process_map(type_nodes=custom(attribute="cost2", median, units = "£")) %>% 
+  DiagrammeRsvg::export_svg() %>% 
+  svgPanZoom::svgPanZoom()
+
+```
+
+
+
+
+
+The final process map shows all the selected activities and combines both frequencies and processing time.
+
+
+
+
+
+```{r mix, out.width="100%", out.height="100%", echo = FALSE}
+hip_log %>% 
+  filter_activity(selected_activity) %>%
+  process_map(type_nodes = frequency("relative_case"),
+              type_edges = performance(median, units = "days")) %>% 
+  DiagrammeRsvg::export_svg() %>% 
+  svgPanZoom::svgPanZoom()
+  
+
+```
+
+
+
+
+
+##### 1.3 Animated Process Maps
+
+Each token in the process map below represents a patient following their own trace (or pathway) over time.
+The tokens can be coloured by different attributes for instance here orange reflects patients who are 50 and over and yellow tokens represent patients less than 50.
+
+
+
+
+
+
+```{r animated process map, echo = FALSE, warning = FALSE}
+
+#By Age Group
+hip_log %>% filter_activity(restricted_activity) %>%
+  animate_process(mode='relative',
+                  duration = 120,
+                  jitter=10, 
+                  legend = "color",
+                  mapping = token_aes(
+                    color= token_scale("age_group"
+                                       , scale = "ordinal"
+                                       , range = RColorBrewer::brewer.pal(2, "Spectral"))),
+                  sizingPolicy = htmlwidgets::sizingPolicy(browser.fill = TRUE, viewer.fill = TRUE, browser.padding = 0,
+    knitr.figure = FALSE, knitr.defaultWidth = 1600, knitr.defaultHeight = 1000) )
+
+```
+
+
+
+
+
+##### 1.4 Process Discovery Heuristics Miner
+
+
+The plot below shows the dependency values for pairs of activities. These are used for setting the dependency thresholds for the model.
+
+
+
+
+
+
+```{r dependency thresholds, echo = FALSE, fig.width=12, fig.height=8, warning = FALSE}
+
+plot(dependency_matrix(selected_activity_log, threshold = 0.0, 
+                       dependency_type = dependency_type_fhm(all_connected = TRUE)))
+
+
+```
+
+
+
+
+
+The following creates a dependency graph/matrix for the Heuristics Miner algorithm using a dependency threshold of 0.5.
+
+
+
+
+
+
+```{r heuristics miner threshold 0.5, out.width="100%", out.height="100%",  echo = FALSE, warning = FALSE}
+
+dependency_matrix(selected_activity_log, threshold = 0.5) %>% 
+  render_dependency_matrix()%>% 
+  DiagrammeRsvg::export_svg() %>% 
+  svgPanZoom::svgPanZoom()
+
+
+```
+
+
+
+
+
+The following creates a dependency graph/matrix for the Heuristics Miner algorithm but using a dependency threshold of 0.6. We see that not all the activities are joined up hence the 0.5 threshold is taken forward.
+
+
+
+
+
+```{r heuristics miner threshold 0.6, out.width="100%", out.height="100%", echo = FALSE, warning = FALSE}
+
+dependency_matrix(selected_activity_log, threshold = 0.6) %>% 
+  render_dependency_matrix()%>% 
+  DiagrammeRsvg::export_svg() %>% 
+  svgPanZoom::svgPanZoom()
+
+
+```
+
+
+
+
+
+
+There are other parameters to the Heuristics Miner algorithm including from the Flexible Heuristics Miner (FHM) 'all_connected' argument. This means the best antecedent and consequent (as determined by the dependency measure) will be added regardless of the threshold value [See heuristicsmineR documentation](https://cran.r-project.org/web/packages/heuristicsmineR/index.html)
+
+
+
+
+
+
+```{r heuristics miner threshold all connected, out.width="100%", out.height="100%", echo = FALSE, warning = FALSE}
+
+dependency_matrix(selected_activity_log, threshold = 0.6, 
+                  dependency_type = dependency_type_fhm(all_connected = TRUE)) %>% 
+  render_dependency_matrix()%>% 
+  DiagrammeRsvg::export_svg() %>% 
+  svgPanZoom::svgPanZoom()
+
+
+```
+
+
+
+
+
+The plot below shows the causal graph otherwise known as the heuristics net for a dependency threshold of 0.5.
+
+
+
+
+
+```{r heuristics net 0.5, out.width="100%", out.height="100%", echo = FALSE, warning = FALSE}
+
+
+causal_net(selected_activity_log, threshold = .5) %>% render_causal_net() %>% 
+  DiagrammeRsvg::export_svg() %>% 
+  svgPanZoom::svgPanZoom()
+
+
+```
+
+
+
+
+
+
+##### 1.5 Process Discovery Inductive Miner
+
+The plots below show the resulting petri net discovered using the inductive mining algorithm (inductive miner directly follows algorithm) and after rendering to DOT format.
+
+The process model discovered using the inductive mining algorithm consists of a petri net, an initial marking and a final marking.
+
+
+
+
+
+
+```{r inductive miner, echo = FALSE, out.width="50%", out.height="40%", warning = FALSE}
+
+pn <- discovery_inductive(patients_completes)
+
+# This results in an auto-converted bupaR Petri net and markings
+str(pn)
+class(pn$petrinet)
+
+# Render with bupaR
+render_PN(pn$petrinet) %>%DiagrammeRsvg::export_svg() %>% 
+  svgPanZoom::svgPanZoom()
+
+```
+
+
+
+
+
+
+
+```{r inductive miner 2, echo = FALSE, out.width="50%", out.height="50%", warning = FALSE}
+
+# Render with  PM4PY and DiagrammeR
+viz <- reticulate::import("pm4py.visualization.petrinet")
+
+# Convert back to Python
+py_pn <- r_to_py(pn$petrinet)
+class(py_pn)
+
+# Render to DOT with PMP4Y
+dot <- viz$factory$apply(py_pn)$source
+grViz(diagram = dot) %>%
+  DiagrammeRsvg::export_svg() %>% 
+  svgPanZoom::svgPanZoom()
+  
+
+
+```
+
+
+
+
+
+
+
+We can use the event log data to compute the alignments by comparing with the model outputs. The alignment table can be used to compare the log_label and the model_label to determine when a move is synchronous.
+
+The quality of the model can be determined by replaying the eventlog data over the discovered model.
+Fitness in this instance is 100% which means the model fits the data well. 
+
+Other measures are also calculated including precision, generalisation, simplicity, average weight and fscore.
+[pm4py documentation for quality measures](https://pm4py.fit.fraunhofer.de/documentation#evaluation "pm4py documentation")
+
+
+
+
+
+
+
+```{r inductive miner 3, echo = FALSE, warning = FALSE}
+
+# Render with  PM4PY and DiagrammeR
+quality <- evaluation_all(patients_completes, pn$petrinet, pn$initial_marking, pn$final_marking)
+
+print(quality)
+
+```
+
+
+
+
+
