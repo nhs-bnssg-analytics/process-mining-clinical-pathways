@@ -10,10 +10,10 @@ This project used process mining to analyse hip replacement pathways and applied
 
 The data used for the project was the [BNSSG System Wide Dataset](https://bnssghealthiertogether.org.uk/population-health-management/#:~:text=The%20Bristol%2C%20North%20Somerset%20and,who%20have%20not%20opted%20out) which covers primary, secondary, community and mental health care records.
 
-This research used bupaR - an open-source, integrated suite of R-packages for the handling and analysis of business process data - along with [PM4Py](https://pm4py.fit.fraunhofer.de/) in Python and SQL.
+This research used bupaR - an open-source, integrated suite of R-packages for the handling and analysis of business process data - along with [PM4Py](https://pm4py.fit.fraunhofer.de/) in Python and SQL for data wranging. There are several commercial and open source tools available for process mining and analytics including ProM, Disco, Celonis and My-Invenio. More recently the open source suite of packages - bupaR - has been developed for the analysis of process data. The NHS CCGs predominately use R for modelling and data analytics and have a growing [NHS R community](https://nhsrcommunity.com/) to provide support, training and resources for analysts in the NHS.  To aid reproducibility and application in the NHS, bupaR was used for these analyses.
 
 
-![image](https://user-images.githubusercontent.com/68733783/120673337-fcc17580-c48a-11eb-8755-15d4e24503d8.png)
+![image](https://user-images.githubusercontent.com/68733783/120673184-dbf92000-c48a-11eb-9db9-e1483981ab65.png)
 
 
 A summary of available discovery algorithms in R are in the below table.
